@@ -51,28 +51,24 @@ use <?php echo $timestamp['timestampBehaviorClass']; ?>;
  */
 abstract class <?= $className ?> extends <?= '\\' . ltrim($generator->baseClass, '\\') . "\n" ?>
 {
-
 <?php
     $traits = $generator->baseTraits;
     if ($traits) {
         echo "use {$traits};";
     }
 ?>
-
-
 <?php
-if(!empty($enum)){
-?>
+if (!empty($enum)) {
+    ?>
     /**
     * ENUM field values
     */
 <?php
-    foreach($enum as $column_name => $column_data){
-        foreach ($column_data['values'] as $enum_value){
+    foreach ($enum as $column_name => $column_data) {
+        foreach ($column_data['values'] as $enum_value) {
             echo '    const ' . $enum_value['const_name'] . ' = \'' . $enum_value['value'] . '\';' . PHP_EOL;
         }
-    }
-?>
+    } ?>
     var $enum_labels = false;
 <?php
 }
@@ -82,7 +78,7 @@ if(!empty($enum)){
      */
     public static function tableName()
     {
-        return '<?= $tableName ?>';
+        return '{{%<?= str_replace($tablePrefix, '', $tableName) ?>}}';
     }
 <?php if ($generator->db !== 'db'): ?>
 
@@ -211,8 +207,8 @@ if(!empty($enum)){
 <?php endif; ?>
 
 <?php
-    foreach($enum as $column_name => $column_data){
-?>
+    foreach ($enum as $column_name => $column_data) {
+        ?>
 
     /**
      * get column <?php echo $column_name?> enum value label
@@ -235,10 +231,9 @@ if(!empty($enum)){
     {
         return [
 <?php
-        foreach($column_data['values'] as $k => $value){
+        foreach ($column_data['values'] as $k => $value) {
             echo '            '.'self::' . $value['const_name'] . ' => ' . $generator->generateString($value['label']) . ",\n";
-        }
-?>
+        } ?>
         ];
     }
 <?php

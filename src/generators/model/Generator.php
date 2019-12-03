@@ -252,12 +252,18 @@ class Generator extends \yii\gii\generators\model\Generator
     public function generate()
     {
         $files = [];
-        $relations = $this->generateRelations();
-        $db = $this->getDbConnection();
 
+        if (!($relations = \Yii::$app->cache->get('_relations'))){
+            $relations = $this->generateRelations();
+            \Yii::$app->cache->set('_relations', $relations);
+            //var_dump('$_relations', array_keys($relations));
+        }
+        
+        $db = $this->getDbConnection();
+        
         foreach ($this->getTableNames() as $tableName) {
             list($relations, $translations) = array_values($this->extractTranslations($tableName, $relations));
-//var_dump($relations,$tableName);exit;
+
             $className = $this->modelClass === '' || php_sapi_name() === 'cli'
                 ? $this->generateClassName($tableName)
                 : $this->modelClass;
@@ -266,6 +272,7 @@ class Generator extends \yii\gii\generators\model\Generator
             $tableSchema = $db->getTableSchema($tableName);
 
             $params = [
+                'tablePrefix' => $this->getTablePrefix(),
                 'tableName' => $tableName,
                 'className' => $className,
                 'queryClassName' => $queryClassName,
@@ -332,6 +339,42 @@ class Generator extends \yii\gii\generators\model\Generator
         }
 
         return $files;
+    }
+
+    private function generateRelationsFromComment(array &$relations) {
+        $ns = "\\{$this->ns}\\";
+        $db = $this->getDbConnection();
+        $preffix = $this->getTablePrefix();
+
+        foreach ($this->getTableNames() as $tableName) {
+            $tableSchema = $db->getTableSchema($tableName);
+
+            foreach ($tableSchema->columns as $column) {
+                if ($column->comment) {
+                    if (preg_match("/CONSTRAINT FOREIGN KEY \((.+)\) REFERENCES (.+)\((.+)\)/i", $column->comment, $matches)) {
+                        list(, $fk, $rt, $rtk) = $matches;
+                        $relationTable = Inflector::camelize($rt);
+                        $relationName = 'FromComment'.Inflector::camelize(str_replace(['_id', 'id_'], '', $fk));
+        
+                        $relations[$tableName][$relationName] = [
+                            'return __$this->hasOne('.$ns.''.$relationTable.'::className(), ["'.$rtk.'" => "'.$fk.'"]);', $relationTable, false
+                        ];
+
+                        $reverseTable = $preffix . $rt;
+                        $reverseRelName = Inflector::camelize(str_replace($preffix, '', $tableName));
+                        $reverseModelName = $reverseRelName;
+
+                        switch ($fk) {
+                            case 'parent_id': $reverseModelName = 'Children';
+                        }
+
+                        $relations[$reverseTable][$reverseModelName] = [
+                            'return __$this->hasMany('.$ns.''.$reverseRelName.'::className(), ["'.$fk.'" => "'.$rtk.'"]);', $reverseRelName, true
+                        ];
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -409,6 +452,12 @@ class Generator extends \yii\gii\generators\model\Generator
         if ($this->generateHintsFromComments) {
             foreach ($table->columns as $column) {
                 if (!empty($column->comment)) {
+                    
+                    if (preg_match("/CONSTRAINT FOREIGN KEY \((.+)\) REFERENCES (.+)\((.+)\)/i", $column->comment, $matches)) {
+                        list(, $fk, $rt, $rtk) = $matches;
+                        $column->comment = Inflector::camelize(str_replace(['_id', 'id_'], '', $fk));
+                    }
+
                     $hints[$column->name] = $column->comment;
                 }
             }
@@ -428,6 +477,7 @@ class Generator extends \yii\gii\generators\model\Generator
     protected function generateRelations()
     {
         $relations = parent::generateRelations();
+        $this->generateRelationsFromComment($relations);
 
         // inject namespace
         $ns = "\\{$this->ns}\\";
